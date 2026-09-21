@@ -1,0 +1,54 @@
+# name: test/sql/icedisk_edge_scan.test
+# description: expand icebug-disk CSR parquet pairs into edge tables
+# group: [icedisk]
+
+require icedisk
+
+require parquet
+
+# Dense mode: no node tables, ids are the raw CSR row numbers
+query II
+SELECT source, target
+FROM icedisk_edge_scan('test/data/icebug_csr/indices_follows.parquet', 'test/data/icebug_csr/indptr_follows.parquet')
+ORDER BY source, target;
+----
+0	1
+0	2
+1	3
+2	0
+
+# Mapped mode: dense ids resolved through the nodes parquet row order,
+# edge properties carried along
+query III
+SELECT source, target, since
+FROM icedisk_edge_scan('test/data/icebug_csr/indices_follows.parquet', 'test/data/icebug_csr/indptr_follows.parquet', 'test/data/icebug_csr/nodes_user.parquet', 'test/data/icebug_csr/nodes_user.parquet')
+ORDER BY source, target;
+----
+100	101	2018
+100	102	2019
+101	103	2020
+102	100	2021
+
+# Heterogeneous edge: source ids from nodes_user, target ids from nodes_city
+query II
+SELECT source, target
+FROM icedisk_edge_scan('test/data/icebug_csr/indices_livesin.parquet', 'test/data/icebug_csr/indptr_livesin.parquet', 'test/data/icebug_csr/nodes_user.parquet', 'test/data/icebug_csr/nodes_city.parquet')
+ORDER BY source, target;
+----
+100	10
+101	10
+102	11
+103	11
+
+# The scan streams: aggregation over the expanded edges works
+query II
+SELECT count(*), sum(since)
+FROM icedisk_edge_scan('test/data/icebug_csr/indices_follows.parquet', 'test/data/icebug_csr/indptr_follows.parquet', 'test/data/icebug_csr/nodes_user.parquet', 'test/data/icebug_csr/nodes_user.parquet');
+----
+4	8078
+
+# Missing files raise a clear error
+statement error
+SELECT * FROM icedisk_edge_scan('test/data/icebug_csr/indices_follows.parquet', 'test/data/does_not_exist.parquet');
+----
+file not found

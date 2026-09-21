@@ -1,0 +1,17 @@
+# name: test/sql/icedisk_version.test
+# description: icedisk extension loads and reports its version
+# group: [icedisk]
+
+# Before the extension is loaded, the function does not exist
+statement error
+SELECT icedisk_version();
+----
+Catalog Error: Scalar Function with name icedisk_version does not exist!
+
+# Require statement ensures this test runs with the extension loaded
+require icedisk
+
+query I
+SELECT icedisk_version();
+----
+icedisk 0.1.0 (icebug-disk v1)

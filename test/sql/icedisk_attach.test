@@ -1,0 +1,69 @@
+# name: test/sql/icedisk_attach.test
+# description: mount a whole icebug-disk directory as native node/edge views
+# group: [icedisk]
+
+require icedisk
+
+require parquet
+
+# Attaching returns a summary of the views it created
+query I
+SELECT icedisk_attach('test/data/icebug_csr');
+----
+mounted 4 views from 'test/data/icebug_csr': edges_follows, edges_livesin, nodes_city, nodes_user
+
+# Node tables are visible as plain pass-through views
+query II
+SELECT id, name FROM nodes_user ORDER BY id;
+----
+100	Adam
+101	Bob
+102	Cara
+103	Dee
+
+query II
+SELECT id, name FROM nodes_city ORDER BY id;
+----
+10	Springfield
+11	Shelbyville
+
+# Homogeneous edge table with its property column
+query III
+SELECT source, target, since FROM edges_follows ORDER BY source, target;
+----
+100	101	2018
+100	102	2019
+101	103	2020
+102	100	2021
+
+# Heterogeneous edge table resolved via schema.cypher FROM/TO
+query II
+SELECT source, target FROM edges_livesin ORDER BY source, target;
+----
+100	10
+101	10
+102	11
+103	11
+
+# Native-feel joins across node and edge tables
+query II
+SELECT u.name, c.name
+FROM edges_livesin e
+JOIN nodes_user u ON u.id = e.source
+JOIN nodes_city c ON c.id = e.target
+ORDER BY u.name;
+----
+Adam	Springfield
+Bob	Springfield
+Cara	Shelbyville
+Dee	Shelbyville
+
+# Attaching twice is idempotent, and the PRAGMA form works too
+statement ok
+PRAGMA icedisk_attach('test/data/icebug_csr');
+
+# Attaching a missing directory raises a clear error
+statement error
+SELECT icedisk_attach('test/data/does_not_exist');
+----
+not a directory
